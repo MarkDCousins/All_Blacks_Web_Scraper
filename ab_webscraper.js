@@ -28,17 +28,15 @@ let stadiumsData = [];
 function setTeamsValue(value){
     teamsData = value;
     isItDone +=1;
-    console.log("ping 1!");
+    // console.log("ping 1!");
 }
 function setLocationsValue(value){
     locationsData = value;
     isItDone +=1;
-    console.log("ping 2!");
 }
 function setStadiumsValue(value){
     stadiumsData = value;
     isItDone +=1;
-    console.log("ping 3!");
 }
 
 // scraping the All Blacks official result's page for the most recent game data, checking it against my existing database
@@ -55,7 +53,7 @@ axios(url)
 
         // creating the variables, and cleaning the data for each section
         stadium = html.match('"Top">(.+?)<\/td>-->')[1]
-        date = games[5];
+        date = new Date(games[5]).toLocaleDateString();
         vs = games[6];
         vsClean = vs.substring(3);
         score = games[7];
@@ -66,6 +64,11 @@ axios(url)
         country = games[9];
 
         // Changing the date to the correct format.
+
+        if (date.indexOf("/") === 1){ // Mitigating differences in date formats and changes x/xx/xxxx to xx/xx/xxxx
+            date = "0"+date;
+        }
+
         let day = date.substring(0,2);
         let month = date.substring(3,5);
         let year = date.substring(6);
@@ -80,25 +83,23 @@ axios(url)
         // connecting to the database and collecting the tables for checking against.
         con.connect(function (err){
             if (err) throw err;
-
-            con.query(getGame, [dateFlipped], function (err, result){
+            con.query(getGame, [dateFlipped], function (err, result) {
                 if (err) throw err;
-                let gameDate = (result[0].date);
-                if (gameDate !== dateFlipped) { // Checking if the game already exists, using the date as the check. If the game does not exist, it is added into the DB.
+
+                if (result[0] === undefined){
+                    console.log("There is no data linked to that search!")
                     con.query(getTeams, function (err, result){
                         if (err) {
                             throw err;
                         } else {
                             setTeamsValue(result);
                         }
-                        console.log(result);
                     });
                     con.query(getLocals, function (err, result){
                         if (err) {
                             throw err;
                         } else {
                             setLocationsValue(result);
-                            console.log(result);
                         }
                     });
                     con.query(getStadiums, function (err, result){
@@ -106,12 +107,16 @@ axios(url)
                             throw err;
                         } else {
                             setStadiumsValue(result);
-                            console.log(result);
                         }
                     });
-                }else{
-                    console.log("A game on " + dateFlipped + " already Exists in the DB.");
-                    process.exit();
+                    console.log("Adding new game!")
+                } else {
+                    let gameDate = (result[0]);
+                    gameDate = gameDate["date"];
+                    if (gameDate === dateFlipped) { // Checking if the game already exists, using the date as the check. If the game does not exist, it is added into the DB.
+                        console.log("A game on " + dateFlipped + " already Exists in the DB.");
+                        process.exit();
+                    }
                 }
             });
         });
@@ -124,7 +129,7 @@ function processMatch() {
     con.connect(function () {
         // setting up the mySQL INSERT and UPDATE statements
         let new_team_data = "INSERT INTO teams (name, times_played, times_won, times_lost, times_drawn) VALUES (?, 1, ?, ?, ?);";
-         let stadium_data = "INSERT INTO stadium_dictionary (stadium_name) VALUES (?);";
+        let stadium_data = "INSERT INTO stadium_dictionary (stadium_name) VALUES (?);";
         let existing_city_new_stadium = "INSERT INTO stadium_dictionary (stadium_name, location) VALUES (?,?);";
         let game_data = "INSERT INTO games (team_1, team_2, team_1_score, team_2_score, venue, date, winning_team) VALUES (?, ?, ?, ?, ?, ?, ?);";
         let add_location = "INSERT INTO locations (country, city) VALUES (?, ?);";
@@ -348,7 +353,7 @@ function processMatch() {
                     }
                 })
             } else {
-                con.query(stadium_data, [stadium], function (err) {
+                con.query(stadium_data, [stadium], function (err) { // Adds new stadium to the DB
                     if (err) {
                         throw err;
                     }
@@ -362,16 +367,13 @@ function processMatch() {
                 throw err;
             }
         });
-        console.log("Scrape complete!");
     })
-
 }
 
 // Makes sure the async side of things are completed so that the data can be used. Also sets a timeout.
 function checkISDone(){
     if(isItDone === 3){
         processMatch();
-        process.exit();
     }else{
         setTimeout(checkISDone,50);
     }
